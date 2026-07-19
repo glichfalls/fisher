@@ -136,6 +136,7 @@ onBeforeUnmount(() => window.removeEventListener('mousedown', onDocDown))
   bottom: calc(100% + 10px);
   left: 0;
   width: 280px;
+  max-width: 90vw;
   padding: 12px;
   border-radius: 14px;
   background: #0d2032;

@@ -48,3 +48,11 @@ textarea,
 select {
   cursor: auto;
 }
+
+/* Avoid the 300ms tap delay / double-tap zoom on interactive elements. */
+button,
+input,
+select,
+a {
+  touch-action: manipulation;
+}

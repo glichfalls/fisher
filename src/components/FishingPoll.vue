@@ -2,6 +2,7 @@
 import { onMounted, ref, computed } from 'vue'
 import { poll } from '../poll'
 import DatePicker from './DatePicker.vue'
+import { isTouch } from '../device'
 
 const nameInput = ref('')
 
@@ -33,6 +34,7 @@ const fmt = (day) => {
     <header class="head">
       <h1>🎣 When shall we go fishing?</h1>
       <p class="sub">Add the days that work, join with your name, then <b>catch the fish</b> for each day you're free — one fish per vote. Best day wins.</p>
+      <p class="sub how">{{ isTouch ? '📱 Tap a fish to catch it.' : '🖱️ Hold left-click to charge, aim, and release to cast your hook.' }}</p>
       <p class="store" :class="{ cloud: poll.usingCloud }">
         {{ poll.usingCloud ? '● shared — everyone sees the same poll' : '● local only — set up Supabase to share (see README)' }}
       </p>
@@ -53,7 +55,7 @@ const fmt = (day) => {
         <button class="btn" @click="submitName">Join the trip</button>
       </template>
       <template v-else>
-        <span class="you">Casting as <b>{{ poll.me.value.name }}</b> — hold, aim, and release to hook the 🐟 for a day. Catch it again to release your vote.</span>
+        <span class="you">Fishing as <b>{{ poll.me.value.name }}</b> — {{ isTouch ? 'tap' : 'hook' }} the 🐟 for a day to vote; {{ isTouch ? 'tap' : 'catch' }} it again to release your vote.</span>
       </template>
     </div>
 
@@ -69,6 +71,12 @@ const fmt = (day) => {
               class="date-col"
               :class="{ best: poll.bestDays.value.has(d.day) }"
             >
+              <button
+                v-if="poll.countFor(d.day) === 0"
+                class="rm"
+                title="Remove this day (no one picked it yet)"
+                @click="poll.removeDate(d.id, d.day)"
+              >×</button>
               <span class="dow">{{ fmt(d.day).dow }}</span>
               <span class="date">{{ fmt(d.day).date }}</span>
               <span class="count">{{ poll.countFor(d.day) }}</span>
@@ -127,6 +135,11 @@ const fmt = (day) => {
 .sub {
   margin: 0 0 8px;
   opacity: 0.72;
+}
+.sub.how {
+  font-size: 13.5px;
+  opacity: 0.85;
+  color: #7ec8ff;
 }
 .store {
   margin: 0;
@@ -214,8 +227,28 @@ td {
 thead .name-col { z-index: 1; }
 
 .date-col {
+  position: relative;
   min-width: 74px;
   line-height: 1.25;
+}
+.rm {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--foam);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.5;
+}
+.rm:hover {
+  opacity: 1;
+  background: rgba(255, 90, 90, 0.7);
 }
 .date-col .dow {
   display: block;
@@ -266,5 +299,35 @@ tr.mine .name-col {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+@media (max-width: 600px) {
+  .poll {
+    padding: 28px 16px 90px;
+  }
+  .field,
+  .btn {
+    font-size: 16px; /* keeps iOS from zooming on focus */
+  }
+  th,
+  td {
+    padding: 8px 9px;
+  }
+  .name-col {
+    min-width: 92px;
+  }
+  .date-col {
+    min-width: 62px;
+  }
+  .cell {
+    font-size: 17px;
+    height: 40px;
+  }
+  .rm {
+    /* Bigger, always-visible tap target on touch. */
+    width: 22px;
+    height: 22px;
+    opacity: 0.8;
+  }
 }
 </style>

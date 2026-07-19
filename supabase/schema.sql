@@ -21,6 +21,7 @@ alter table poll_participants enable row level security;
 -- Public poll: anyone may read and add. (Tighten these if you ever add auth.)
 create policy "dates read"   on poll_dates for select using (true);
 create policy "dates insert" on poll_dates for insert with check (true);
+create policy "dates delete" on poll_dates for delete using (true);
 
 create policy "participants read"   on poll_participants for select using (true);
 create policy "participants insert" on poll_participants for insert with check (true);

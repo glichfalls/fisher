@@ -83,6 +83,19 @@ function createPoll() {
     }
   }
 
+  // Remove a candidate day — only allowed while nobody has picked it yet.
+  async function removeDate(id, day) {
+    if (participants.value.some((p) => (p.available || []).includes(day))) return
+    if (hasSupabase) {
+      const { error: e } = await supabase.from('poll_dates').delete().eq('id', id)
+      if (e) return (error.value = e.message)
+      dates.value = dates.value.filter((d) => d.id !== id)
+    } else {
+      dates.value = dates.value.filter((d) => d.id !== id)
+      lsWrite()
+    }
+  }
+
   async function addDate(day) {
     if (!day) return
     if (dates.value.some((d) => d.day === day)) return // no duplicate days
@@ -177,6 +190,7 @@ function createPoll() {
     load,
     subscribe,
     addDate,
+    removeDate,
     join,
     toggle,
   }

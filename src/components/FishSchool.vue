@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { poll } from '../poll'
+import { isTouch } from '../device'
 
 // All fish icons from assets/icons — drop new *.png files in there and they're
 // picked up automatically (sorted by filename for a stable assignment).
@@ -88,7 +89,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
       v-for="f in fishes"
       :key="f.day"
       class="fish"
-      :class="{ mine: mine(f.day), hit: f.hit }"
+      :class="{ mine: mine(f.day), hit: f.hit, tappable: isTouch }"
       :data-catch="f.day"
       :style="{ left: f.x + 'px', top: f.y + 'px' }"
       @click="onCatch(f)"
@@ -118,6 +119,13 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
   align-items: center;
   gap: 3px;
   will-change: left, top;
+}
+/* On touch devices the rod is gone — tap a fish directly to vote. */
+.fish.tappable {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  padding: 6px; /* bigger tap target */
 }
 .body {
   width: 54px;

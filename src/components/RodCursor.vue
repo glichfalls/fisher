@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { isTouch } from '../device'
 
 /* ------------------------------------------------------------------ *
  * Tuning
@@ -225,6 +226,7 @@ function frame(now) {
 }
 
 onMounted(() => {
+  if (isTouch) return // no hover-driven rod on touch devices
   mouse.x = window.innerWidth / 2
   mouse.y = window.innerHeight / 2
   window.addEventListener('mousemove', onMove)
@@ -242,7 +244,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <svg class="rod-cursor" width="100%" height="100%">
+  <svg v-if="!isTouch" class="rod-cursor" width="100%" height="100%">
     <!-- aim preview while charging -->
     <path v-if="charging" :d="previewPath" class="preview" />
     <circle v-if="charging" :cx="landing.x" :cy="landing.y" :r="CATCH_R + 24" class="reticle" />
