@@ -4,14 +4,33 @@ import { supabase, hasSupabase } from './supabase'
 /**
  * Live presence + cursors over a Supabase Realtime channel.
  *  - Presence: who's currently fishing (for the online list).
- *  - Broadcast 'cursor': normalized pointer position + state (idle/charge/cast).
+ *  - Broadcast 'cursor': normalized rod state (position, aim, charge, cast).
  *  - Broadcast 'catch':  someone hooked a fish for a given day.
  * All ephemeral — no database writes.
  */
 
-const sessionId =
-  (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
-  's-' + Math.random().toString(36).slice(2)
+// Stable per-browser id (shared across this browser's tabs) so extra tabs of the
+// same person collapse into one angler and never show up as "yourself".
+function stableId() {
+  const KEY = 'fishing-live-id'
+  let id = null
+  try {
+    id = localStorage.getItem(KEY)
+  } catch {
+    /* ignore */
+  }
+  if (!id) {
+    id = (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) || 's-' + Math.random().toString(36).slice(2)
+    try {
+      localStorage.setItem(KEY, id)
+    } catch {
+      /* ignore */
+    }
+  }
+  return id
+}
+
+const sessionId = stableId()
 
 function colorFor(id) {
   let h = 0
@@ -21,7 +40,7 @@ function colorFor(id) {
 const myColor = colorFor(sessionId)
 
 export const mySessionId = sessionId
-export const peers = reactive({}) // id -> { id, name, color, nx, ny, state, catchDay, catchAt }
+export const peers = reactive({}) // id -> { id, name, color, ...rodState, catchDay, catchAt, catchNx, catchNy }
 export const online = ref([]) // [{ id, name, color, isMe }]
 
 let channel = null
@@ -29,7 +48,7 @@ let nameGetter = () => 'Angler'
 
 function ensurePeer(id, name) {
   if (!peers[id]) {
-    peers[id] = { id, name: name || 'Angler', color: colorFor(id), nx: 0.5, ny: 0.5, state: 'idle', catchDay: null, catchAt: 0 }
+    peers[id] = { id, name: name || 'Angler', color: colorFor(id), bx: 0.5, by: 0.5, ax: 0.55, ay: -0.83, bd: 0, ch: 0, st: 'idle', catchDay: null, catchAt: 0 }
   }
   return peers[id]
 }
@@ -58,18 +77,17 @@ export function initLive(getName) {
   })
   channel
     .on('broadcast', { event: 'cursor' }, ({ payload }) => {
+      if (payload.id === sessionId) return // never render our own rod
       const p = ensurePeer(payload.id, payload.name)
-      p.nx = payload.nx
-      p.ny = payload.ny
-      p.state = payload.st
-      if (payload.name) p.name = payload.name
+      Object.assign(p, payload)
     })
     .on('broadcast', { event: 'catch' }, ({ payload }) => {
+      if (payload.id === sessionId) return
       const p = ensurePeer(payload.id, payload.name)
-      p.nx = payload.nx
-      p.ny = payload.ny
       p.catchDay = payload.day
       p.catchAt = performance.now()
+      p.catchNx = payload.nx
+      p.catchNy = payload.ny
     })
     .on('presence', { event: 'sync' }, refreshOnline)
     .on('presence', { event: 'join' }, refreshOnline)
@@ -91,12 +109,12 @@ export async function updateName() {
 }
 
 let lastSent = 0
-export function sendCursor(nx, ny, st) {
+export function sendCursor(payload) {
   if (!channel) return
   const now = performance.now()
   if (now - lastSent < 45) return // ~22 updates/sec
   lastSent = now
-  channel.send({ type: 'broadcast', event: 'cursor', payload: { id: sessionId, name: nameGetter(), nx, ny, st } })
+  channel.send({ type: 'broadcast', event: 'cursor', payload: { id: sessionId, name: nameGetter(), ...payload } })
 }
 
 export function sendCatch(day, nx, ny) {
