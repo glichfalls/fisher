@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { poll } from '../poll'
 import { isTouch } from '../device'
 import { sendCatch } from '../live'
@@ -12,35 +12,59 @@ const FISH_IMAGES = Object.entries(
   .sort(([a], [b]) => a.localeCompare(b))
   .map(([, url]) => url)
 
-const fishes = ref([]) // { day, x, y, vx, vy, img, hit }
-
-const rand = (a, b) => a + Math.random() * (b - a)
-
-function spawn(day, i) {
-  const w = window.innerWidth
-  const h = window.innerHeight
-  return {
-    day,
-    x: rand(80, w - 80),
-    y: rand(120, h - 80),
-    vx: rand(30, 70) * (Math.random() < 0.5 ? -1 : 1),
-    vy: rand(-22, 22),
-    img: FISH_IMAGES[i % FISH_IMAGES.length],
-    hit: false,
+/* Deterministic per-day randomness so every client places the same fish in the
+ * same normalized spot and moves it identically (shared wall clock). */
+function hash(str) {
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }
 
-// Keep the school in sync with the candidate days.
-watch(
-  poll.dates,
-  (dates) => {
-    const days = new Set(dates.map((d) => d.day))
-    fishes.value = fishes.value.filter((f) => days.has(f.day))
-    dates.forEach((d, i) => {
-      if (!fishes.value.some((f) => f.day === d.day)) fishes.value.push(spawn(d.day, i))
-    })
-  },
-  { immediate: true, deep: true },
+// Motion is a smooth sine path in normalized [0,1] space — viewport-independent,
+// loops forever, and stays clear of the extreme edges.
+function makeFish(day) {
+  const r = mulberry32(hash(day))
+  return {
+    day,
+    img: FISH_IMAGES[hash(day + 'img') % FISH_IMAGES.length],
+    ax: 0.30 + r() * 0.10,
+    ay: 0.26 + r() * 0.10,
+    fx: 0.04 + r() * 0.05, // rad/sec — slow drift
+    fy: 0.05 + r() * 0.05,
+    px: r() * Math.PI * 2,
+    py: r() * Math.PI * 2,
+    cx: 0.5,
+    cy: 0.5,
+  }
+}
+
+const fish = computed(() => poll.dates.value.map((d) => makeFish(d.day)))
+
+const t = ref(0)
+const W = ref(window.innerWidth)
+const H = ref(window.innerHeight)
+const hits = reactive({})
+
+// Positions for the current frame — same nx/ny on every client at a given time.
+const placed = computed(() =>
+  fish.value.map((f) => {
+    const nx = f.cx + f.ax * Math.sin(f.fx * t.value + f.px)
+    const ny = f.cy + f.ay * Math.sin(f.fy * t.value + f.py)
+    const dir = Math.cos(f.fx * t.value + f.px) // +ve => moving right
+    return { ...f, nx, ny, x: nx * W.value, y: ny * H.value, flip: dir > 0 ? -1 : 1 }
+  }),
 )
 
 const mine = (day) => (poll.me.value?.available || []).includes(day)
@@ -54,51 +78,45 @@ const fmt = (day) => {
 function onCatch(f) {
   const wasMine = mine(f.day)
   poll.toggle(f.day)
-  if (!wasMine) sendCatch(f.day, f.x / window.innerWidth, f.y / window.innerHeight)
-  f.hit = true
-  setTimeout(() => (f.hit = false), 320)
-  // Startled dart in a new direction.
-  f.vx = rand(40, 90) * (Math.random() < 0.5 ? -1 : 1)
-  f.vy = rand(-30, 30)
+  if (!wasMine) sendCatch(f.day, f.nx, f.ny)
+  hits[f.day] = true
+  setTimeout(() => delete hits[f.day], 320)
 }
 
 let raf = 0
-let last = 0
-function frame(now) {
-  const dt = last ? Math.min(0.05, (now - last) / 1000) : 0
-  last = now
-  if (!window.__FISH_STATIC__) {
-    const w = window.innerWidth
-    const h = window.innerHeight
-    for (const f of fishes.value) {
-      f.x += f.vx * dt
-      f.y += f.vy * dt + Math.sin(now / 500 + f.x) * 0.3
-      if (f.x < 50) { f.x = 50; f.vx = Math.abs(f.vx) }
-      if (f.x > w - 50) { f.x = w - 50; f.vx = -Math.abs(f.vx) }
-      if (f.y < 100) { f.y = 100; f.vy = Math.abs(f.vy) }
-      if (f.y > h - 60) { f.y = h - 60; f.vy = -Math.abs(f.vy) }
-    }
-  }
+function frame() {
+  if (!window.__FISH_STATIC__) t.value = Date.now() / 1000
   raf = requestAnimationFrame(frame)
 }
+function onResize() {
+  W.value = window.innerWidth
+  H.value = window.innerHeight
+}
 
-onMounted(() => (raf = requestAnimationFrame(frame)))
-onBeforeUnmount(() => cancelAnimationFrame(raf))
+onMounted(() => {
+  t.value = Date.now() / 1000
+  window.addEventListener('resize', onResize)
+  raf = requestAnimationFrame(frame)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  cancelAnimationFrame(raf)
+})
 </script>
 
 <template>
   <div class="school">
     <div
-      v-for="f in fishes"
+      v-for="f in placed"
       :key="f.day"
       class="fish"
-      :class="{ mine: mine(f.day), hit: f.hit, tappable: isTouch }"
+      :class="{ mine: mine(f.day), hit: hits[f.day], tappable: isTouch }"
       :data-catch="f.day"
       :style="{ left: f.x + 'px', top: f.y + 'px' }"
       @click="onCatch(f)"
     >
       <!-- icons face left; flip when swimming right so they always face forward -->
-      <img class="body" :src="f.img" alt="" :style="{ '--flip': f.vx < 0 ? 1 : -1 }" />
+      <img class="body" :src="f.img" alt="" :style="{ '--flip': f.flip }" />
       <span class="tag">
         <span v-if="mine(f.day)" class="check">✓</span>{{ fmt(f.day) }}
       </span>
