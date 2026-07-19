@@ -1,10 +1,9 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue'
-import { usePoll } from '../poll'
+import { poll } from '../poll'
+import DatePicker from './DatePicker.vue'
 
-const poll = usePoll()
 const nameInput = ref('')
-const newDate = ref('')
 
 onMounted(async () => {
   await poll.load()
@@ -17,10 +16,8 @@ function submitName() {
   poll.join(nameInput.value)
   nameInput.value = ''
 }
-function submitDate() {
-  poll.addDate(newDate.value)
-  newDate.value = ''
-}
+
+const existingDays = computed(() => poll.dates.value.map((d) => d.day))
 
 const fmt = (day) => {
   const d = new Date(day + 'T00:00:00')
@@ -29,19 +26,13 @@ const fmt = (day) => {
     date: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
   }
 }
-
-// Today, for the min attribute on the date picker.
-const todayISO = computed(() => {
-  const now = new Date()
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-})
 </script>
 
 <template>
   <div class="poll">
     <header class="head">
       <h1>🎣 When shall we go fishing?</h1>
-      <p class="sub">Add the days that work, then check every day you're free. Best day wins.</p>
+      <p class="sub">Add the days that work, join with your name, then <b>catch the fish</b> for each day you're free — one fish per vote. Best day wins.</p>
       <p class="store" :class="{ cloud: poll.usingCloud }">
         {{ poll.usingCloud ? '● shared — everyone sees the same poll' : '● local only — set up Supabase to share (see README)' }}
       </p>
@@ -62,7 +53,7 @@ const todayISO = computed(() => {
         <button class="btn" @click="submitName">Join the trip</button>
       </template>
       <template v-else>
-        <span class="you">Casting as <b>{{ poll.me.value.name }}</b> — click cells in your row to toggle.</span>
+        <span class="you">Casting as <b>{{ poll.me.value.name }}</b> — hold, aim, and release to hook the 🐟 for a day. Catch it again to release your vote.</span>
       </template>
     </div>
 
@@ -93,10 +84,8 @@ const todayISO = computed(() => {
               class="cell"
               :class="{
                 yes: (p.available || []).includes(d.day),
-                editable: p.id === poll.myId.value,
                 best: poll.bestDays.value.has(d.day),
               }"
-              @click="p.id === poll.myId.value && poll.toggle(d.day)"
             >
               <span v-if="(p.available || []).includes(d.day)">🐟</span>
             </td>
@@ -115,8 +104,7 @@ const todayISO = computed(() => {
 
     <!-- add a date -->
     <div class="add-date">
-      <input v-model="newDate" type="date" class="field" :min="todayISO" />
-      <button class="btn ghost" :disabled="!newDate" @click="submitDate">+ Add date</button>
+      <DatePicker :existing="existingDays" @add="poll.addDate($event)" />
     </div>
   </div>
 </template>
@@ -262,13 +250,6 @@ tr.mine .name-col {
 }
 .cell.best {
   background: rgba(138, 255, 193, 0.06);
-}
-.cell.editable {
-  cursor: none;
-  background: rgba(126, 200, 255, 0.06);
-}
-.cell.editable:hover {
-  background: rgba(126, 200, 255, 0.16);
 }
 .cell.yes.editable {
   background: rgba(126, 200, 255, 0.2);

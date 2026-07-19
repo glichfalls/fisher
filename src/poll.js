@@ -20,7 +20,7 @@ const uid = () =>
   (crypto.randomUUID && crypto.randomUUID()) ||
   'id-' + Math.abs(Math.floor(performance.now() * 1000)).toString(36)
 
-export function usePoll() {
+function createPoll() {
   const dates = ref([])
   const participants = ref([])
   const myId = ref(localStorage.getItem(ME_KEY) || null)
@@ -181,3 +181,6 @@ export function usePoll() {
     toggle,
   }
 }
+
+// One shared poll instance for the whole app (grid + fish read/write the same state).
+export const poll = createPoll()

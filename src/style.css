@@ -35,3 +35,16 @@ button {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* Form controls use the normal cursor (the rod hides over them). */
+button,
+button *,
+a,
+a * {
+  cursor: pointer;
+}
+input,
+textarea,
+select {
+  cursor: auto;
+}
