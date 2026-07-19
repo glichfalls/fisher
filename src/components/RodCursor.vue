@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { isTouch } from '../device'
+import { sendCursor } from '../live'
 
 /* ------------------------------------------------------------------ *
  * Tuning
@@ -120,10 +121,16 @@ const overUi = ref(false)
 // Hide the rod (and show the native cursor) while hovering real form controls.
 const showRod = computed(() => charging.value || cast.active || !overUi.value)
 
+function pushLive() {
+  const st = charging.value ? 'charge' : cast.active ? 'cast' : 'idle'
+  sendCursor(mouse.x / window.innerWidth, mouse.y / window.innerHeight, st)
+}
+
 function onMove(e) {
   mouse.x = e.clientX
   mouse.y = e.clientY
   overUi.value = !!e.target.closest('input, button, a, select, textarea, [data-native]')
+  pushLive()
 }
 
 function onDown(e) {
@@ -206,6 +213,8 @@ function frame(now) {
 
   const bendTarget = charging.value ? charge.value * MAX_PULLBACK : 0
   rodBend.value += (bendTarget - rodBend.value) * 0.3
+
+  if (charging.value || cast.active) pushLive() // keep peers updated mid-cast
 
   if (cast.active) {
     const p = (now - cast.startAt) / cast.duration

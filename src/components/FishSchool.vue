@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { poll } from '../poll'
 import { isTouch } from '../device'
+import { sendCatch } from '../live'
 
 // All fish icons from assets/icons — drop new *.png files in there and they're
 // picked up automatically (sorted by filename for a stable assignment).
@@ -51,7 +52,9 @@ const fmt = (day) => {
 
 // Called when the hook catches a fish (the rod dispatches a click on it).
 function onCatch(f) {
+  const wasMine = mine(f.day)
   poll.toggle(f.day)
+  if (!wasMine) sendCatch(f.day, f.x / window.innerWidth, f.y / window.innerHeight)
   f.hit = true
   setTimeout(() => (f.hit = false), 320)
   // Startled dart in a new direction.

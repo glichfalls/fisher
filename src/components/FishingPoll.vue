@@ -1,15 +1,20 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { poll } from '../poll'
 import DatePicker from './DatePicker.vue'
 import { isTouch } from '../device'
+import { initLive, updateName, online } from '../live'
 
 const nameInput = ref('')
 
 onMounted(async () => {
   await poll.load()
   poll.subscribe()
+  initLive(() => poll.me.value?.name || 'Angler')
 })
+
+// Re-announce presence when you join or change your name.
+watch(() => poll.me.value?.name, () => updateName())
 
 const joined = computed(() => !!poll.me.value)
 
@@ -38,6 +43,16 @@ const fmt = (day) => {
       <p class="store" :class="{ cloud: poll.usingCloud }">
         {{ poll.usingCloud ? '● shared — everyone sees the same poll' : '● local only — set up Supabase to share (see README)' }}
       </p>
+      <div v-if="online.length" class="online">
+        <span class="dot">🎣</span>
+        <span class="who">{{ online.length }} fishing now:</span>
+        <span
+          v-for="o in online"
+          :key="o.id"
+          class="chip"
+          :style="{ background: o.color }"
+        >{{ o.name }}{{ o.isMe ? ' (you)' : '' }}</span>
+      </div>
     </header>
 
     <p v-if="poll.error.value" class="err">{{ poll.error.value }}</p>
@@ -147,6 +162,24 @@ const fmt = (day) => {
   color: #ffcf8f;
 }
 .store.cloud { color: #8affc1; }
+
+.online {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.online .who {
+  opacity: 0.7;
+}
+.chip {
+  color: #06131f;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
 
 .err {
   background: rgba(255, 90, 90, 0.14);
